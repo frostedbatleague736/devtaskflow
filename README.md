@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cwyhkyochen-a11y/devtaskflow/main/assets/og-cover.png" alt="DevTaskFlow" width="720"/>
+</p>
+
 # DevTaskFlow
 
 > 用自然语言发起开发任务，让 AI 帮你把 **需求 → 方案 → 代码 → 审查 → 修复 → 部署 → 发布** 串成一条真正可执行的流水线。
