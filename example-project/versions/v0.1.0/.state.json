@@ -1,0 +1,14 @@
+{
+  "version": "v0.1.0",
+  "status": "created",
+  "mode": "new",
+  "architecture_confirmed": false,
+  "current_task": null,
+  "tasks": [],
+  "last_error": null,
+  "last_action": null,
+  "last_result_format": null,
+  "last_summary": "",
+  "created_at": "2026-03-19T00:00:00",
+  "updated_at": "2026-03-19T00:00:00"
+}

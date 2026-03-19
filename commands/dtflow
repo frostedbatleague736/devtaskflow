@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+import sys
+from pathlib import Path
+
+BASE = Path(__file__).resolve().parent.parent
+LIB = BASE / 'lib'
+sys.path.insert(0, str(LIB))
+
+from cli import main
+
+if __name__ == '__main__':
+    raise SystemExit(main())
