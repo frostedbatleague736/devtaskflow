@@ -1,6 +1,6 @@
 ---
 name: DevTaskFlow
-description: 不会写代码？没关系。用自然语言描述你想做什么，AI 自动帮你分析需求、生成代码、本地预览、审查修复、部署上线。适合产品经理、运营、业务人员搭建自己的工具。
+description: 用自然语言发起开发任务，AI 驱动的开发流水线。Describe your idea, get working software. 适合产品、运营、业务人员从 0 搭建项目。
 metadata:
   {
     "openclaw": {
