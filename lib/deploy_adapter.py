@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import shlex
 import subprocess
 from pathlib import Path
 
 
 def run_shell(command: str, cwd: Path):
+    """Run a single command safely using argument list (no shell=True).
+
+    For commands requiring shell features (pipes, redirects, &&),
+    wrap them as: bash -c "your | command && here"
+    """
     if not command.strip():
         return {'command': command, 'skipped': True}
-    result = subprocess.run(command, cwd=str(cwd), shell=True, capture_output=True, text=True)
+    args = shlex.split(command)
+    result = subprocess.run(args, cwd=str(cwd), capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f'命令执行失败: {command}')
     return {

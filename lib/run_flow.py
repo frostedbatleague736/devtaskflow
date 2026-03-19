@@ -94,8 +94,9 @@ def run_flow(project_root: Path, config: dict, port: int = 3000) -> dict:
     install_cmd = proj_type['install']
     if install_cmd:
         print(f'📦 安装依赖: {install_cmd}')
+        install_args = install_cmd.split()
         result = subprocess.run(
-            install_cmd, shell=True, cwd=str(project_root),
+            install_args, cwd=str(project_root),
             capture_output=True, text=True, timeout=300,
         )
         if result.returncode != 0:
@@ -103,6 +104,7 @@ def run_flow(project_root: Path, config: dict, port: int = 3000) -> dict:
 
     # 准备启动命令
     start_cmd = proj_type['start'].format(port=port)
+    start_args = start_cmd.split()
     env = {**os.environ, 'PORT': str(port)}
 
     print(f'🚀 启动服务: {start_cmd}')
@@ -113,7 +115,7 @@ def run_flow(project_root: Path, config: dict, port: int = 3000) -> dict:
     log_f = open(log_file, 'w')
 
     proc = subprocess.Popen(
-        start_cmd, shell=True, cwd=str(project_root),
+        start_args, cwd=str(project_root),
         stdout=log_f, stderr=log_f, env=env,
     )
 
