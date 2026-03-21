@@ -37,6 +37,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / 'templates'
 
 
+def _mask_host(host: str) -> str:
+    """对主机地址进行脱敏，保留前缀和后缀，中间用 * 替代。"""
+    if not host:
+        return ''
+    # IP 地址：保留第一段
+    parts = host.split('.')
+    if len(parts) == 4:
+        return f'{parts[0]}.*.*.{parts[3]}'
+    # 域名：保留首尾字符
+    if len(host) <= 4:
+        return host[0] + '***'
+    return host[:2] + '***' + host[-2:]
+
+
 def list_projects(start: Path):
     workspace_root = find_workspace_root(start)
     return load_projects(workspace_root / DEFAULT_PROJECTS_FILE)
@@ -273,12 +287,13 @@ def cmd_board(args):
                     print(f'   进度：{explanation}')
                     print(f'   下一步：{next_step}')
 
-                    # 部署信息
+                    # 部署信息（脱敏显示）
                     deploy = config.get('deploy', {})
                     host = deploy.get('host', '')
                     deploy_path = deploy.get('path', '')
                     if host or deploy_path:
-                        print(f'   部署：{deploy.get("user", "")}@{host}:{deploy_path}' if deploy.get('user') else f'   部署：{host}:{deploy_path}')
+                        masked_host = _mask_host(host)
+                        print(f'   部署：{masked_host}（已配置）' if host else f'   部署：已配置')
         except Exception:
             pass
 
@@ -358,15 +373,17 @@ def cmd_board_query(args):
             if last_error:
                 print(f'\n⚠️ 最近错误：{last_error}')
 
-        # 部署信息
+        # 部署信息（脱敏显示）
         deploy = config.get('deploy', {})
         host = deploy.get('host', '')
         if host:
+            masked_host = _mask_host(host)
             print(f'\n📦 部署信息')
-            print(f'  服务器：{deploy.get("user", "")}@{host}')
-            print(f'  路径：{deploy.get("path", "")}')
-            print(f'  构建：{deploy.get("build_command", "") or "未配置"}')
-            print(f'  部署：{deploy.get("deploy_command", "") or "未配置"}')
+            print(f'  服务器：{masked_host}')
+            build_cmd = deploy.get('build_command', '')
+            print(f'  构建：{"已配置" if build_cmd else "未配置"}')
+            deploy_cmd = deploy.get('deploy_command', '')
+            print(f'  部署：{"已配置" if deploy_cmd else "未配置"}')
 
         # 需求摘要
         req_path = vd / 'docs' / 'REQUIREMENTS.md'
