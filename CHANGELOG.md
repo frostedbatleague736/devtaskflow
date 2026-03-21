@@ -13,6 +13,12 @@
 - 新增 --final-review 和 --deploy-skip-review 命令
 - 综合审查评分 <7 分自动触发修复循环
 
+**Compliance: Data Exposure Prevention**
+
+- `cli.py`: 部署信息脱敏显示（IP 保留首尾段，域名模糊化），不再直接打印 user/path
+- `cli.py`: 新增 `_mask_host()` 脱敏函数
+- `SKILL.md`: 主动调用策略改为"识别意图 → 建议用户 → 等待确认后执行"，不再无条件自动触发
+
 ## v0.5.1 (2026-03-19)
 
 **Security Fix: Shell Injection Prevention**
