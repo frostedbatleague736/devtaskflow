@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.8.0 (2026-03-24)
+
+**Feature: OpenClaw 编排器 + ClawHub 发布**
+
+- `openclaw_subagent.py` 完全重写：从纯占位变为完整实现
+  - 新增 `_OpenClawLLM` 类，独立于 `local_llm`，从 `config.openclaw` 读取 base_url / api_key / model
+  - 支持全部 5 个 action：analyze / write / review / fix / comprehensive_review
+  - 支持环境变量 fallback（`DTFLOW_OPENCLAW_*`）
+  - prompt 加载、JSON 解析、FILE block fallback 与 local_llm 一致
+- `publish_flow.py` 新增 `ClawHubPublishAdapter`
+  - 检查 clawhub CLI 可用性 + 登录状态
+  - 验证 SKILL.md 存在
+  - 调用 `clawhub publish` 发布
+  - 结果记录到 state
+- `cli.py`：publish 命令 `--target` 新增 `clawhub` 选项
+- `templates/config.json`：
+  - `openclaw` 段新增 `base_url` / `api_key` / `model` 字段
+  - `adapters.publish` 默认值改为 `clawhub`
+- `docs/B2_IMPLEMENTATION_PLAN.md` 更新为全部 Phase 已完成
+
 ## v0.7.0 (2026-03-23)
 
 **Feature: React Best Practices + Web UI Quality Guidelines**
