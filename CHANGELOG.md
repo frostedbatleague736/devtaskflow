@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.9.0 (2026-03-25)
+
+**Feature: 错误恢复 + 配置简化 + 封版自动化**
+
+- **错误恢复机制** — 三层保障
+  - `retry_with_backoff` 装饰器：指数退避自动重试（默认 3 次），集成到所有 LLM 调用
+  - 检查点机制：StateManager 新增 `checkpoint` / `list_checkpoints` / `restore_checkpoint`，关键操作前自动快照
+  - `dtflow advanced rollback --list/--to` — 回滚到任意检查点
+  - `dtflow advanced recover` — 自动检测 6 类状态异常并修复（方案缺失、src 为空、无部署记录、failed 无详情、状态异常、检查点信息）
+  - 友好错误提示从 5 种扩展到 14 种，每种含操作建议，通用兜底提示运行 recover
+- **配置简化（setup 三档模式）**
+  - 极简模式（auto）：自动检测环境变量 / .env / OpenClaw 配置，零输入直接复用
+  - 引导模式（guided）：3 步完成 — 选模型 → 填 API Key → 选部署方式
+  - 高级模式（advanced）：保留完整手动配置流程
+  - `dtflow setup --mode auto|guided|advanced` 跳过交互选择
+  - PRESETS 每个模型增加 base_url，引导模式自动填入
+- **封版三件套**
+  - 封版时自动生成 CHANGELOG.md — 从 state tasks 分已完成/未完成列表
+  - 封版后自动创建下一版本目录 — patch 递增 + docs/src + 初始 .state.json
+  - DEPLOYMENT.md 自动填充 — 从 config.deploy 读取 host/user/path/命令，缺失字段显示"待配置"
+
 ## v0.8.0 (2026-03-24)
 
 **Feature: OpenClaw 编排器 + ClawHub 发布**

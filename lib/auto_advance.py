@@ -7,7 +7,7 @@ from typing import Any
 from state import StateManager
 from project import get_current_version_dir
 from llm_risk import estimate_llm_risk, print_llm_risk
-from error_handling import mark_command_failed
+from error_handling import mark_command_failed, retry_with_backoff
 
 
 # 状态流转表：每个状态对应 (下一步动作, 执行函数获取器)
@@ -33,7 +33,11 @@ def _do_analyze(project_root: Path, config: dict, state: StateManager) -> dict:
 
     print('\n📋 正在分析需求...')
     print_llm_risk(estimate_llm_risk(project_root, config, 'analyze'))
-    result = run_analyze(project_root, config)
+
+    @retry_with_backoff
+    def _call():
+        return run_analyze(project_root, config)
+    result = _call()
 
     tasks = result.get('tasks', []) or []
     print(f'\n✅ 分析完成！共发现 {len(tasks)} 个任务：')
@@ -74,9 +78,14 @@ def _do_write(project_root: Path, config: dict, state: StateManager) -> dict:
     from write_flow import run_write
     from human_summary import render_write_summary
 
+    state.checkpoint('pre_write')
     print('\n🔨 正在生成代码...')
     print_llm_risk(estimate_llm_risk(project_root, config, 'write'))
-    result = run_write(project_root, config, dry_run=False)
+
+    @retry_with_backoff
+    def _call():
+        return run_write(project_root, config, dry_run=False)
+    result = _call()
 
     count = result.get('count', 0)
     files = result.get('files', []) or []
@@ -94,7 +103,11 @@ def _do_review(project_root: Path, config: dict, state: StateManager) -> dict:
 
     print('\n🔍 正在审查代码...')
     print_llm_risk(estimate_llm_risk(project_root, config, 'review'))
-    result = run_review(project_root, config)
+
+    @retry_with_backoff
+    def _call():
+        return run_review(project_root, config)
+    result = _call()
 
     passed = result.get('passed', False)
     score = result.get('score', '-')
@@ -122,7 +135,11 @@ def _do_fix(project_root: Path, config: dict, state: StateManager) -> dict:
 
     print('\n🔧 正在修复问题...')
     print_llm_risk(estimate_llm_risk(project_root, config, 'fix'))
-    result = run_fix(project_root, config)
+
+    @retry_with_backoff
+    def _call():
+        return run_fix(project_root, config)
+    result = _call()
 
     count = result.get('count', 0)
     print(f'\n✅ 修复完成，更新了 {count} 个文件')
@@ -140,6 +157,7 @@ def _do_deploy(project_root: Path, config: dict, state: StateManager) -> dict:
     """执行 deploy。"""
     from release_flow import run_deploy
 
+    state.checkpoint('pre_deploy')
     print('\n🚀 正在部署...')
     state.data['status'] = 'deploying'
     state.data['last_action'] = 'deploy'
@@ -195,6 +213,7 @@ def _do_seal(project_root: Path, config: dict, state: StateManager) -> dict:
     """执行 seal。"""
     from release_flow import run_seal
 
+    state.checkpoint('pre_seal')
     print('\n📦 正在封版归档...')
     result = run_seal(project_root, config)
 

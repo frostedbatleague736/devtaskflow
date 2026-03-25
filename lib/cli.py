@@ -11,7 +11,7 @@ from state import StateManager
 from write_flow import run_write
 from review_flow import run_review
 from fix_flow import run_fix
-from release_flow import run_deploy, run_seal
+from release_flow import run_deploy, run_seal, bump_version
 from publish_flow import run_publish
 from version_flow import create_version
 from dashboard import build_dashboard
@@ -64,20 +64,6 @@ def get_project_by_name(name: str, start: Path):
     raise RuntimeError(f'项目不存在: {name}')
 
 
-def bump_version(version: str, bump: str):
-    if not version.startswith('v'):
-        raise ValueError('版本号必须以 v 开头，例如 v1.2.3')
-    parts = version[1:].split('.')
-    if len(parts) != 3:
-        raise ValueError('版本号必须是语义化版本，例如 v1.2.3')
-    major, minor, patch = map(int, parts)
-    if bump == 'major':
-        return f'v{major + 1}.0.0'
-    if bump == 'minor':
-        return f'v{major}.{minor + 1}.0'
-    return f'v{major}.{minor}.{patch + 1}'
-
-
 def find_next_version(project_root: Path, config: dict, new_project: bool = False) -> str:
     versions_dir = project_root / config['pipeline'].get('versions_dir', 'versions')
     if new_project or not versions_dir.exists():
@@ -94,7 +80,8 @@ def find_next_version(project_root: Path, config: dict, new_project: bool = Fals
 
 def cmd_setup(args):
     root = find_project_root()
-    return run_setup(project_root=root)
+    mode = getattr(args, 'mode', None)
+    return run_setup(project_root=root, mode=mode)
 
 
 # ============================================================
@@ -420,6 +407,8 @@ def cmd_advanced(args):
     print('  dtflow advanced deploy          手动部署')
     print('  dtflow advanced seal            手动封版')
     print('  dtflow advanced publish         发布到 GitHub / ClawHub')
+    print('  dtflow advanced rollback        回滚到检查点')
+    print('  dtflow advanced recover         自动检测修复状态异常')
     print('  dtflow advanced next-version    计算下一个版本号')
     print('  dtflow advanced project-list    项目列表（原始格式）')
     print('  dtflow advanced project-status  单项目状态')
@@ -640,6 +629,9 @@ def cmd_adv_seal(args):
         return 1
     print('✅ seal 完成')
     print(f"- 版本：{result['version']}")
+    if result.get('next_version'):
+        print(f"\n🚀 下一个版本 {result['next_version']} 已就绪")
+        print(f"   运行 dtflow start --idea \"新需求\" 开始新版本开发")
     return 0
 
 
@@ -734,6 +726,170 @@ def cmd_adv_demo(args):
 
 
 # ============================================================
+# 高级命令: rollback — 回滚到检查点
+# ============================================================
+
+def cmd_adv_rollback(args):
+    root = find_project_root()
+    if not root:
+        print('⚠️ 当前目录不是 DevTaskFlow 项目。')
+        return 1
+    try:
+        config = load_config(root)
+        version_dir = get_current_version_dir(root, config)
+        if not version_dir:
+            raise RuntimeError('没有找到当前版本目录')
+        state = StateManager(version_dir)
+    except Exception as e:
+        print(f'⚠️ 加载失败：{e}')
+        return 1
+
+    if args.list:
+        checkpoints = state.list_checkpoints()
+        if not checkpoints:
+            print('当前没有任何检查点。')
+            print('检查点会在关键操作前自动创建（write、deploy、seal）。')
+            return 0
+        print('📸 可用检查点')
+        print('=' * 40)
+        for label, ts in checkpoints:
+            print(f'  {label}  ({ts})')
+        print(f'\n共 {len(checkpoints)} 个检查点。')
+        print('使用 dtflow advanced rollback --to <label> 回滚到指定检查点。')
+        return 0
+
+    if not args.to:
+        print('请指定要回滚到的检查点：')
+        print('  dtflow advanced rollback --list        查看可用检查点')
+        print('  dtflow advanced rollback --to <label>  回滚到指定检查点')
+        return 1
+
+    try:
+        state.restore_checkpoint(args.to)
+    except FileNotFoundError as e:
+        print(f'⚠️ {e}')
+        return 1
+    except Exception as e:
+        print(f'⚠️ 回滚失败：{e}')
+        return 1
+
+    print(f'当前状态：{state.data.get("status", "-")}')
+    print(f'当前任务：{state.data.get("current_task") or "-"}')
+    print('\n👉 运行 dtflow advanced status 查看详细状态')
+    print('   运行 dtflow start 继续执行')
+    return 0
+
+
+# ============================================================
+# 高级命令: recover — 自动检测修复状态异常
+# ============================================================
+
+def cmd_adv_recover(args):
+    root = find_project_root()
+    if not root:
+        print('⚠️ 当前目录不是 DevTaskFlow 项目。')
+        return 1
+    try:
+        config = load_config(root)
+        version_dir = get_current_version_dir(root, config)
+        if not version_dir:
+            raise RuntimeError('没有找到当前版本目录')
+        state = StateManager(version_dir)
+    except Exception as e:
+        print(f'⚠️ 加载失败：{e}')
+        return 1
+
+    status = state.data.get('status', 'unknown')
+    fixes_applied = []
+
+    print('🔍 正在检测状态异常...')
+    print('=' * 40)
+
+    # 检查 1: state 存在但 plan_markdown 不存在
+    if status in ('pending_confirm', 'confirmed', 'writing', 'written'):
+        plan_file = version_dir / 'docs' / 'PLAN.md'
+        if not plan_file.exists():
+            print('⚠️ 状态为「{status}」但方案文件不存在')
+            print('   → 重置状态为 created，需要重新分析')
+            state.data['status'] = 'created'
+            state.data['architecture_confirmed'] = False
+            state.save()
+            fixes_applied.append('重置状态为 created（方案文件缺失）')
+
+    # 检查 2: state 为 written 但 src 目录为空
+    if status in ('written', 'review_passed'):
+        src_dir = version_dir / 'src'
+        if not src_dir.exists() or not any(src_dir.iterdir()):
+            print(f'⚠️ 状态为「{status}」但 src 目录为空')
+            print('   → 需要重新 write')
+            state.data['status'] = 'confirmed'
+            state.save()
+            fixes_applied.append(f'状态从 {status} 回退为 confirmed（src 目录为空）')
+
+    # 检查 3: state 为 deployed 但没有部署记录
+    if status == 'deployed':
+        deploy_log = version_dir / '.deploy.log'
+        deploy_dir = version_dir / 'deploy'
+        has_deploy_record = deploy_log.exists() or (deploy_dir.exists() and any(deploy_dir.iterdir()))
+        if not has_deploy_record:
+            print('⚠️ 状态为 deployed 但没有部署记录')
+            print('   → 状态回退为 review_passed')
+            state.data['status'] = 'review_passed'
+            state.save()
+            fixes_applied.append('状态从 deployed 回退为 review_passed（无部署记录）')
+
+    # 检查 4: state 为 failed 但 last_error 为空
+    if status == 'failed':
+        last_error = state.data.get('last_error')
+        if not last_error:
+            print('⚠️ 状态为 failed 但没有错误信息')
+            print('   → 清除 failed 状态')
+            state.data['status'] = state.data.get('last_status', 'created')
+            state.data['last_error'] = None
+            state.save()
+            fixes_applied.append('清除 failed 状态（无错误详情）')
+
+    # 检查 5: 状态异常值
+    valid_statuses = {
+        'created', 'pending_confirm', 'confirmed', 'writing', 'written',
+        'needs_fix', 'failed', 'review_passed', 'pending_final_review',
+        'ready_to_deploy', 'deploying', 'deployed', 'sealed',
+        'needs_final_fix', 'initialized',
+    }
+    if status not in valid_statuses:
+        print(f'⚠️ 状态值异常：「{status}」')
+        print('   → 重置为 created')
+        state.data['status'] = 'created'
+        state.save()
+        fixes_applied.append(f'重置异常状态「{status}」为 created')
+
+    # 检查 6: 检查点目录是否存在
+    cp_dir = version_dir / '.checkpoints'
+    if cp_dir.exists():
+        cp_count = len(list(cp_dir.glob('*.json')))
+        print(f'📸 检查点：{cp_count} 个可用')
+        if cp_count > 0:
+            print('   如需回滚：dtflow advanced rollback --list')
+
+    # 总结
+    print()
+    if fixes_applied:
+        print(f'✅ 已修复 {len(fixes_applied)} 个问题：')
+        for fix in fixes_applied:
+            print(f'   ✓ {fix}')
+        print(f'\n当前状态：{state.data.get("status")}')
+        print('👉 运行 dtflow start 继续执行')
+    else:
+        print('✅ 未发现异常。')
+        print(f'   当前状态：{status}')
+        print('   如果仍有问题，可以尝试：')
+        print('   - dtflow advanced rollback --list  查看检查点并回滚')
+        print('   - dtflow advanced status  查看详细状态')
+
+    return 0
+
+
+# ============================================================
 # CLI 入口
 # ============================================================
 
@@ -747,6 +903,8 @@ def main():
     # --- 核心命令 ---
 
     p_setup = subparsers.add_parser('setup', help='配置 AI 服务（首次使用必做）')
+    p_setup.add_argument('--mode', choices=['auto', 'guided', 'advanced'],
+                          help='配置模式：auto=自动检测, guided=引导式, advanced=高级')
     p_setup.set_defaults(func=cmd_setup)
 
     p_start = subparsers.add_parser('start', help='开始或继续一个项目')
@@ -832,6 +990,14 @@ def main():
 
     p_adv_demo = advanced_sub.add_parser('demo', help='查看示例项目')
     p_adv_demo.set_defaults(func=cmd_adv_demo)
+
+    p_adv_rb = advanced_sub.add_parser('rollback', help='回滚到检查点')
+    p_adv_rb.add_argument('--to', help='检查点标签')
+    p_adv_rb.add_argument('--list', action='store_true', help='列出所有检查点')
+    p_adv_rb.set_defaults(func=cmd_adv_rollback)
+
+    p_adv_rc = advanced_sub.add_parser('recover', help='自动检测修复状态异常')
+    p_adv_rc.set_defaults(func=cmd_adv_recover)
 
     args = parser.parse_args()
     if not hasattr(args, 'func'):

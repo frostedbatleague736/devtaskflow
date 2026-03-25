@@ -1,4 +1,6 @@
 from pathlib import Path
+from datetime import datetime
+import json
 import shutil
 
 from project import get_current_version_dir
@@ -6,30 +8,128 @@ from state import StateManager
 from deploy_adapter import run_deploy_adapter
 
 
-def ensure_deployment_guide(project_root: Path, version_dir: Path):
+def bump_version(version: str, bump: str = 'patch'):
+    if not version.startswith('v'):
+        raise ValueError('版本号必须以 v 开头，例如 v1.2.3')
+    parts = version[1:].split('.')
+    if len(parts) != 3:
+        raise ValueError('版本号必须是语义化版本，例如 v1.2.3')
+    major, minor, patch = map(int, parts)
+    if bump == 'major':
+        return f'v{major + 1}.0.0'
+    if bump == 'minor':
+        return f'v{major}.{minor + 1}.0'
+    return f'v{major}.{minor}.{patch + 1}'
+
+
+def generate_changelog(version_dir: Path, tasks: list, version: str):
+    changelog_file = version_dir / 'docs' / 'CHANGELOG.md'
+    if changelog_file.exists():
+        return changelog_file
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    done = [t for t in tasks if t.get('status') == 'done']
+    not_done = [t for t in tasks if t.get('status') != 'done']
+
+    lines = [
+        '# CHANGELOG',
+        '',
+        f'## {version} ({today})',
+        '',
+    ]
+
+    if done:
+        lines.append('### ✅ 已完成')
+        for t in done:
+            lines.append(f"- {t.get('name', t.get('id', '?'))}")
+        lines.append('')
+
+    if not_done:
+        lines.append('### ⚠️ 未完成')
+        for t in not_done:
+            priority = t.get('priority', '')
+            name = t.get('name', t.get('id', '?'))
+            if priority:
+                lines.append(f"- {name} ({priority})")
+            else:
+                lines.append(f"- {name}")
+        lines.append('')
+
+    lines.append('---')
+    lines.append('')
+
+    changelog_file.parent.mkdir(parents=True, exist_ok=True)
+    changelog_file.write_text('\n'.join(lines), encoding='utf-8')
+    return changelog_file
+
+
+def create_next_version_dir(project_root: Path, config: dict, current_version: str):
+    next_ver = bump_version(current_version, 'patch')
+    versions_dir = project_root / config.get('pipeline', {}).get('versions_dir', 'versions')
+    next_dir = versions_dir / next_ver
+    next_dir.mkdir(parents=True, exist_ok=True)
+    (next_dir / 'docs').mkdir(exist_ok=True)
+    (next_dir / 'src').mkdir(exist_ok=True)
+
+    now = datetime.now().isoformat()
+    state_data = {
+        'version': next_ver,
+        'status': 'created',
+        'current_task': None,
+        'architecture_confirmed': False,
+        'tasks': [],
+        'created_at': now,
+        'updated_at': now,
+        'last_error': None,
+        'last_action': None,
+        'last_result_format': None,
+        'last_summary': '',
+    }
+    (next_dir / '.state.json').write_text(
+        json.dumps(state_data, ensure_ascii=False, indent=2),
+        encoding='utf-8'
+    )
+    return next_ver, next_dir
+
+
+def ensure_deployment_guide(project_root: Path, version_dir: Path, config=None):
     deploy_guide = version_dir / 'docs' / 'DEPLOYMENT.md'
     if deploy_guide.exists():
         return deploy_guide
 
+    if config is None:
+        config = {}
+
+    deploy_cfg = config.get('deploy', {})
+    project_name = config.get('project', {}).get('name', project_root.name)
+    host = deploy_cfg.get('host', '待配置')
+    user = deploy_cfg.get('user', '待配置')
+    deploy_path = deploy_cfg.get('path', '待配置')
+    build_command = deploy_cfg.get('build_command', '待配置')
+    deploy_command = deploy_cfg.get('deploy_command', '待配置')
+    restart_command = deploy_cfg.get('restart_command', '待配置')
+
     content = f"""# DEPLOYMENT
 
-## 项目路径
-- project_root: {project_root}
-- version: {version_dir.name}
+## 版本信息
+- 版本: {version_dir.name}
+- 项目: {project_name}
 
-## 部署方式
-- 当前为手动部署占位说明
-- 请补充：服务器地址、部署目录、启动命令、重启命令、回滚方式
+## 服务器
+- 地址: {host}
+- 用户: {user}
+- 部署目录: {deploy_path}
 
-## 建议模板
-- 服务器：
-- 部署目录：
-- 环境变量：
-- 构建命令：
-- 启动命令：
-- 重启命令：
-- 回滚方法：
+## 部署命令
+- 构建: {build_command}
+- 启动: {deploy_command}
+- 重启: {restart_command}
+
+## 回滚方式
+- 源码备份: versions/{version_dir.name}/archive/src/
+- 回滚步骤: 将 archive/src/ 的内容复制回项目根目录，然后重启服务
 """
+    deploy_guide.parent.mkdir(parents=True, exist_ok=True)
     deploy_guide.write_text(content, encoding='utf-8')
     return deploy_guide
 
@@ -99,7 +199,11 @@ def run_seal(project_root: Path, config: dict):
     if state.data.get('status') not in {'deployed', 'review_passed', 'all_done'}:
         raise RuntimeError(f"当前状态不允许 seal: {state.data.get('status')}")
 
-    deployment_file = ensure_deployment_guide(project_root, version_dir)
+    # 生成 CHANGELOG
+    tasks = state.data.get('tasks', [])
+    changelog_file = generate_changelog(version_dir, tasks, version_dir.name)
+
+    deployment_file = ensure_deployment_guide(project_root, version_dir, config)
     docs_archive, docs_files = archive_docs(version_dir)
     src_dir, src_count = archive_source(project_root, version_dir)
 
@@ -113,6 +217,9 @@ def run_seal(project_root: Path, config: dict):
     }
     state.save()
 
+    # 自动创建下一版本目录
+    next_version, next_dir = create_next_version_dir(project_root, config, version_dir.name)
+
     return {
         'version': version_dir.name,
         'docs_dir': str(docs_archive),
@@ -120,4 +227,6 @@ def run_seal(project_root: Path, config: dict):
         'deployment_file': str(deployment_file),
         'docs_files': docs_files,
         'src_items': src_count,
+        'changelog_file': str(changelog_file),
+        'next_version': next_version,
     }
