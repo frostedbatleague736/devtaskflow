@@ -1,23 +1,11 @@
 ---
 name: DevTaskFlow
-version: 0.10.0
+version: 1.0.0
 description: 用自然语言发起开发任务，AI 驱动的开发流水线。Describe your idea, get working software. 适合产品、运营、业务人员从 0 搭建项目。
 metadata:
   {
     "openclaw": {
-      "requires": {
-        "env": [
-          "DTFLOW_LLM_BASE_URL",
-          "DTFLOW_LLM_API_KEY",
-          "DTFLOW_LLM_MODEL",
-          "DTFLOW_OPENCLAW_BASE_URL (optional, for openclaw_subagent orchestration)",
-          "DTFLOW_OPENCLAW_API_KEY (optional, for openclaw_subagent orchestration)",
-          "DTFLOW_OPENCLAW_MODEL (optional, for openclaw_subagent orchestration)",
-          "DTFLOW_GITHUB_TOKEN (optional, for GitHub publish)",
-          "DTFLOW_DEPLOY_SSH_KEY (optional, for SSH deploy)",
-          "DTFLOW_DOCKER_REGISTRY (optional, for Docker deploy)"
-        ]
-      }
+      "requires": {}
     }
   }
 license: MIT-0

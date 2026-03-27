@@ -194,7 +194,18 @@ def _detect_existing_config(project_root: Path | None = None) -> dict | None:
         api_key = api_key or oc_key
         model = model or oc_model
 
-    # 4. 再尝试 OpenRouter 等常见变量
+    # 4. 尝试从 OpenClaw 主配置自动检测
+    if not (base_url and api_key and model):
+        try:
+            from openclaw_config import detect_openclaw_llm
+            oc = detect_openclaw_llm()
+            base_url = base_url or oc.get('base_url', '').strip()
+            api_key = api_key or oc.get('api_key', '').strip()
+            model = model or oc.get('model', '').strip()
+        except Exception:
+            pass
+
+    # 5. 再尝试 OpenRouter 等常见变量
     if not base_url:
         base_url = os.environ.get('OPENROUTER_BASE_URL', '').strip()
     if not api_key:
@@ -246,6 +257,21 @@ def _guess_base_url(model: str) -> str:
 
 def _setup_auto(project_root: Path | None = None) -> int:
     """极简模式 — 自动检测已有配置并应用。"""
+    # 优先尝试从 OpenClaw 主配置自动读取
+    try:
+        from openclaw_config import detect_openclaw_llm
+        oc = detect_openclaw_llm()
+        if oc.get('base_url') and oc.get('api_key') and oc.get('model'):
+            os.environ['DTFLOW_LLM_BASE_URL'] = oc['base_url']
+            os.environ['DTFLOW_LLM_API_KEY'] = oc['api_key']
+            os.environ['DTFLOW_LLM_MODEL'] = oc['model']
+            print(f'✅ 自动使用 OpenClaw 配置: {oc["model"]}')
+            _apply_config(oc, project_root)
+            _run_doctor_check()
+            return 0
+    except Exception:
+        pass
+
     existing = _detect_existing_config(project_root)
     if existing:
         print()

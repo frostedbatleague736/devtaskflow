@@ -51,6 +51,8 @@ class _OpenClawLLM:
     """
 
     def __init__(self, config: dict):
+        from openclaw_config import detect_openclaw_llm
+
         ocfg = config.get('openclaw', {})
         self.base_url = ocfg.get('base_url', '').rstrip('/')
         self.api_key = ocfg.get('api_key', '')
@@ -63,6 +65,16 @@ class _OpenClawLLM:
             self.api_key = os.getenv('DTFLOW_OPENCLAW_API_KEY', '')
         if not self.model:
             self.model = os.getenv('DTFLOW_OPENCLAW_MODEL', '')
+
+        # Fallback: 自动从 OpenClaw 配置读取
+        if not all([self.base_url, self.api_key, self.model]):
+            oc = detect_openclaw_llm()
+            if not self.base_url:
+                self.base_url = oc.get('base_url', '')
+            if not self.api_key:
+                self.api_key = oc.get('api_key', '')
+            if not self.model:
+                self.model = oc.get('model', '')
 
         self.timeout = ocfg.get('timeout_seconds', 900)
 

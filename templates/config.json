@@ -12,10 +12,7 @@
     "state_file": ".state.json"
   },
   "llm": {
-    "provider": "openai-compatible",
-    "base_url_env": "DTFLOW_LLM_BASE_URL",
-    "api_key_env": "DTFLOW_LLM_API_KEY",
-    "model_env": "DTFLOW_LLM_MODEL"
+    "provider": "openai-compatible"
   },
   "adapters": {
     "deploy": "shell",

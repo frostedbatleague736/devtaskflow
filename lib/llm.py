@@ -8,10 +8,22 @@ class LLMError(Exception):
 
 class OpenAICompatibleLLM:
     def __init__(self, config: dict):
+        from openclaw_config import detect_openclaw_llm
+
         llm = config.get('llm', {})
         self.base_url = os.getenv(llm.get('base_url_env', 'DTFLOW_LLM_BASE_URL'), '').rstrip('/')
         self.api_key = os.getenv(llm.get('api_key_env', 'DTFLOW_LLM_API_KEY'), '')
         self.model = os.getenv(llm.get('model_env', 'DTFLOW_LLM_MODEL'), '')
+
+        # Fallback: 自动从 OpenClaw 配置读取
+        if not all([self.base_url, self.api_key, self.model]):
+            oc = detect_openclaw_llm()
+            if not self.base_url:
+                self.base_url = oc.get('base_url', '')
+            if not self.api_key:
+                self.api_key = oc.get('api_key', '')
+            if not self.model:
+                self.model = oc.get('model', '')
 
     def validate(self):
         missing = []

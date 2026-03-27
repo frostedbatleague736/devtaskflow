@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.0.0 (2026-03-28) 🎉
+
+**里程碑: DevTaskFlow 1.0 正式版 — 架构回归 OpenClaw 原生能力**
+
+- **架构重构: 彻底移除冗余 LLM 配置**
+  - 新建 `lib/openclaw_config.py` — 自动从 `~/.openclaw/openclaw.json` + `credentials/` 读取 model / base_url / api_key
+  - `lib/llm.py` — env var 读不到时自动 fallback 到 OpenClaw 配置
+  - `lib/orchestrators/openclaw_subagent.py` — 同上
+  - 用户零配置：运行在 OpenClaw 环境内自动获取 LLM 设置
+- **安全清理: 消除 ClawHub 安全扫描 Note**
+  - SKILL.md metadata 删除全部 9 个 env var 声明（`requires: {}`）
+  - 3 个未使用的 credential 声明（DTFLOW_DEPLOY_SSH_KEY / DTFLOW_GITHUB_TOKEN / DTFLOW_DOCKER_REGISTRY）→ 删除
+  - 6 个冗余 LLM 配置变量 → 删除（OpenClaw 原生管理模型，skill 无需重复配置）
+- **配置简化**
+  - `lib/doctor.py` — 诊断项从检查 env var 改为 OpenClaw 自动检测
+  - `lib/setup_flow.py` — auto 模式优先用 OpenClaw 配置，零输入
+  - `templates/config.json` — 精简配置模板，移除 llm 段
+
 ## v0.10.0 (2026-03-27)
 
 **Feature: Git 自动化 — 每次新建/迭代项目自动使用 Git**
