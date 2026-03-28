@@ -5,7 +5,10 @@ description: 用自然语言发起开发任务，AI 驱动的开发流水线。D
 metadata:
   {
     "openclaw": {
-      "requires": {}
+      "requires": {
+        "python": ">=3.10",
+        "node": ">=18"
+      }
     }
   }
 license: MIT-0
